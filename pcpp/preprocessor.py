@@ -811,7 +811,7 @@ class Preprocessor(PreprocessorHooks):
     # integral expressions.
     # ----------------------------------------------------------------------
 
-    def evalexpr(self,tokens):
+    def evalexpr(self,tokens, get_strings=False):
         """Evaluate an expression token sequence for the purposes of evaluating
         integral expressions."""
         if not tokens:
@@ -878,6 +878,10 @@ class Preprocessor(PreprocessorHooks):
                 if sys.version_info.major >= 3:
                     if len(tokens[i].value) > 1 and tokens[i].value[0] == '0' and tokens[i].value[1] >= '0' and tokens[i].value[1] <= '7':
                         tokens[i].value = '0o' + tokens[i].value[1:]
+            elif t.type == self.t_STRING and get_strings:
+                tokens[i] = copy.copy(t)
+                tokens[i].value = repr(str(tokens[i].value))
+
             elif t.type == self.t_COLON:
                 # Find the expression before the colon
                 cs = ce = i - 1
@@ -924,14 +928,19 @@ class Preprocessor(PreprocessorHooks):
                 # Note this is identical length
                 tokens = tokens[:es] + tokens[cs:ce+1] + tokens[ternary:ternary+1] + tokens[es:ee+1] + tokens[i:]
         
-        expr = origexpr = "".join([str(x.value) for x in tokens if x.type not in self.t_COMMENT])
+        expr = "".join([str(x.value) for x in tokens if x.type not in self.t_COMMENT])
         expr = expr.replace("&&"," and ")
         expr = expr.replace("||"," or ")
         expr = expr.replace("!="," <> ")
         expr = expr.replace("!"," not ")
         expr = expr.replace(" <> ", " != ")
         try:
-            result = int(eval(expr, evalfuncts, evalvars))
+            expr_eval = eval(expr, evalfuncts, evalvars)
+            if get_strings:
+                if type(expr_eval) is str and expr_eval[-1] == '"':
+                    return expr_eval[1:-1]
+                return expr_eval
+            result = int(expr_eval)
         except Exception:
             print("%s:%d" % (tokens[0].source,tokens[0].lineno), "warning: couldn't evaluate expression due to", traceback.format_exc()
             + "\nConverted expression was", expr, "with evalvars =", repr(evalvars))
